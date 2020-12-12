@@ -1,6 +1,7 @@
 ---
-title: "R Notebook"
+title: "Model card approval"
 output:
+  pdf_document: default
   html_document:
     df_print: paged
 editor_options:
@@ -8,7 +9,7 @@ editor_options:
 ---
 
 Loading used packages
-```{r}
+```{r,warning=F,message=F,echo=T}
 library(tidyverse)
 library(tidymodels)
 library(plotROC)
@@ -128,7 +129,7 @@ records %>%
 
 
 Vintage plot for 60+ DPD (no cumulative)
-```{r}
+```{r,warning=F,message=F,fig.width=6, fig.height=4}
 plt_60_dpd <- 
   # transform data and calculate vintages
   records %>%
@@ -309,7 +310,7 @@ test_data  <- testing(data_split)
 
 
 Using tidy-models approach let's build random forest model
-```{r}
+```{r, warning=F, message=F}
 # Create recepie 
 application_rec <- 
   recipe(IS_DEFAULT ~ ., data = train_data) %>%
@@ -346,6 +347,7 @@ Pull calculated metrics on 10-folds cross-validation
 collect_metrics(application_cross_validation)
 ```
 
+
 Estimate performance on test sample
 ```{r}
 # Fit model for evaluation on test data
@@ -356,7 +358,7 @@ application_fitted <-
 ```
 
 Create plot for variable importance
-```{r}
+```{r,fig.width=4, fig.height=2.5}
 application_wf %>% 
   last_fit(data_split) %>%
   pluck(".workflow", 1) %>%
@@ -365,7 +367,7 @@ application_wf %>%
 ```
 
 Make ROC-curve 
-```{r}
+```{r,fig.width=6, fig.height=3}
 application_fitted %>%
   predict(new_data = test_data)%>%
   bind_cols(predict(application_fitted,new_data = test_data, type = "prob"))%>%
