@@ -308,7 +308,7 @@ test_data  <- testing(data_split)
 ```
 
 
-Using tidy-models approach let's build random forest model using only woe transformation and creating dummy variables for FLAG... variables.
+Using tidy-models approach let's build random forest model
 ```{r}
 # Create recepie 
 application_rec <- 
@@ -339,11 +339,12 @@ application_wf %>%
                                                          precision, 
                                                          recall,
                                                          roc_auc))
-
-# Pull calculated metrics on 10-folds cross-validation
-collect_metrics(application_cross_validation)
 ```
 
+Pull calculated metrics on 10-folds cross-validation
+```{r}
+collect_metrics(application_cross_validation)
+```
 
 Estimate performance on test sample
 ```{r}
@@ -352,22 +353,15 @@ set.seed(123)
 application_fitted <- 
   application_wf %>%
   fit(data = train_data)
+```
 
-# Calculate basic metrics
-application_prediction_rf_01 <-
-  application_fitted %>%
-  predict(new_data = test_data)%>%
-  bind_cols(predict(application_fitted,new_data = test_data, type = "prob"))%>%
-  bind_cols(test_data %>% select(IS_DEFAULT))
-
-# Set metrics for calculation
-multi_metric <- metric_set(accuracy, precision, recall)
-
-# Calculate metrics and combine in one table
-bind_rows(
-  multi_metric(application_prediction_rf_01, 
-               truth = IS_DEFAULT, estimate = .pred_class),
-  roc_auc(application_prediction_rf_01, IS_DEFAULT, .pred_Default))
+Create plot for variable importance
+```{r}
+application_wf %>% 
+  last_fit(data_split) %>%
+  pluck(".workflow", 1) %>%
+  pull_workflow_fit() %>%
+  vip::vip(num_features = 20)
 ```
 
 Make ROC-curve 
@@ -380,81 +374,16 @@ application_fitted %>%
   autoplot()
 ```
 
-Create plot for variable importance
+Calculate basic metrics
 ```{r}
-application_wf %>% 
-  last_fit(data_split) %>%
-  pluck(".workflow", 1) %>%
-  pull_workflow_fit() %>%
-  vip::vip(num_features = 20)
+application_prediction_rf_01 <-
+  application_fitted %>%
+  predict(new_data = test_data)%>%
+  bind_cols(predict(application_fitted,new_data = test_data, type = "prob"))%>%
+  bind_cols(test_data %>% select(IS_DEFAULT))
+multi_metric <- metric_set(accuracy, precision, recall)
+bind_rows(
+  multi_metric(application_prediction_rf_01, 
+               truth = IS_DEFAULT, estimate = .pred_class),
+  roc_auc(application_prediction_rf_01, IS_DEFAULT, .pred_Default))
 ```
-
-Let's calibrate basic model.
-Firstly create calibration sample with assumption that long run average probability of default ~ 5%. Default loan ~ 600, so we should random sample 12000 loans. 600/(600+12000) ~ 5%
-```{r}
-set.seed(123)
-application_calibration <- 
-  bind_rows(
-  #combine defaults data ~ 600 loans
-    application %>% 
-      filter(IS_DEFAULT == "Default"),
-    #add non defaults borrowers = 12000 loans
-    application %>%
-      filter(IS_DEFAULT != "Default") %>%
-      slice_sample(n = 12000))
-```
-
-Roc-curve for PD estimation of calibration sample
-```{r}
-predict(application_fitted, new_data = application_calibration, type = "prob") %>%
-  bind_cols(application_calibration %>% select(IS_DEFAULT)) %>%
-  roc_curve(IS_DEFAULT, .pred_Default) %>%
-  autoplot()
-```
-
-Confusion matrix
-```{r}
-predict(application_fitted, new_data = application_calibration) %>%
-  bind_cols(application_calibration %>% select(IS_DEFAULT)) %>% 
-  conf_mat(IS_DEFAULT,.pred_class)
-```
-
-Minimize sum(Defaults - PD)^2
-Constraint avg(PD) --> 5% (long run average)
-
-
-```{r}
-prediction_probs <- predict(application_fitted, 
-                            new_data = application_calibration, 
-                            type = "prob") %>%
-  bind_cols(application_calibration %>% 
-              select(IS_DEFAULT)) %>% 
-  pull(.pred_Default)
-  
-prediction_defaults <- 
-  predict(application_fitted, 
-          new_data = application_calibration, 
-          type = "prob") %>%
-  bind_cols(application_calibration %>% 
-              select(IS_DEFAULT)) %>% 
-  pull(IS_DEFAULT)
-
-prediction_score <- 
-  predict(application_fitted, 
-                            new_data = application_calibration, 
-                            type = "prob") %>%
-  bind_cols(application_calibration %>% 
-              select(IS_DEFAULT)) %>% 
-  mutate(score = log(.pred_Default/(1-.pred_Default))) %>% pull(score)
-
-```
-
-
-```{r}
-# PD_CALIB = exp(score * a + b)/(1 + exp(score * a + b))
-# sum((Defaults - PD_Calib)^2) --> min
-# sum(PD_Calib)*1/n --> 5%
-```
-
-
-
